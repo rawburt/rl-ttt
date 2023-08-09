@@ -1,4 +1,6 @@
 from typing import Optional
+from matplotlib import pyplot
+from time import time
 import random
 
 EMPTY = 0
@@ -58,15 +60,30 @@ class MissingLastStateActionError(BaseException):
 
 class QLearningAgent:
     def __init__(self, player: int) -> None:
-        self.learn_rate = 0.9
+        self.learn_rate = 0.3
         self.discount = 0.95
         self.epsilon = 0.9
-        self.epsilon_step = 0.000001
+        self.epsilon_decay = 0.000005
+        self.epsilon_min = 0.1
         self.player = player
         self.last_state_action: Optional[tuple[tuple[int, ...], int]] = None
         self.qtable: dict = {}
 
-    def pick_action(self, board: list[int]) -> int:
+    def policy_pick(self, board: list[int]) -> int:
+        state = tuple(board)
+        available_actions = [i for i, m in enumerate(state) if m == EMPTY]
+        action = 0
+        # initialize qtable
+        if (state, action) not in self.qtable:
+            for a in range(9):
+                if (state, a) not in self.qtable:
+                    self.qtable[(state, a)] = 0.05
+        scores = [self.qtable[(state, a)] for a in available_actions]
+        i = scores.index(max(scores))
+        action = available_actions[i]
+        return action
+
+    def pick_and_train_action(self, board: list[int]) -> int:
         state = tuple(board)
         available_actions = [i for i, m in enumerate(state) if m == EMPTY]
         action = 0
@@ -126,51 +143,67 @@ class QLearningAgent:
             raise MissingLastStateActionError
 
         # update epsilon
-        self.epsilon -= self.epsilon_step
-        if self.epsilon < 0.05:
-            self.epsilon = 0.05
+        self.epsilon -= self.epsilon_decay
+        self.epsilon = max(self.epsilon_min, self.epsilon)
 
-
-print("Training")
 
 player1 = QLearningAgent(PLAYER1)
 player2 = QLearningAgent(PLAYER2)
 
-for i in range(1_000_000):
+stats: dict = {"win": [], "draw": [], "loss": []}
+
+# Player1 v Player2
+for i in range(200_000):
     if i % 10_000 == 0:
         print(".", end="", flush=True)
     game = Game()
     while not game.is_over():
-        action = player1.pick_action(game.board)
+        action = player1.pick_and_train_action(game.board)
         game.update(action)
         if game.is_over():
             break
-        action = player2.pick_action(game.board)
+        action = player2.pick_and_train_action(game.board)
         game.update(action)
-    # player1.train(game.winner)
     player1.end_episode(game.winner)
-    # player2.train(game.winner)
     player2.end_episode(game.winner)
 
-stats = [0, 0, 0]
-for _ in range(100):
-    game = Game()
-    while not game.is_over():
-        action = player1.pick_action(game.board)
-        game.update(action)
-        if game.is_over():
-            break
-        action = random.choice([i for i, m in enumerate(game.board) if m == EMPTY])
-        game.update(action)
-    if game.winner:
-        if game.winner == PLAYER1:
-            stats[0] += 1
-        else:
-            stats[1] += 1
-    else:
-        stats[2] += 1
+    if i % 2_000 == 0:
+        # Player1 v Random
+        wins = 0
+        draw = 0
+        loss = 0
+        for _ in range(10):
+            game = Game()
+            while not game.is_over():
+                action = player1.policy_pick(game.board)
+                game.update(action)
+                if game.is_over():
+                    break
+                action = random.choice(
+                    [i for i, m in enumerate(game.board) if m == EMPTY]
+                )
+                game.update(action)
+            if game.winner:
+                if game.winner == PLAYER1:
+                    wins += 1
+                else:
+                    loss += 1
+            else:
+                draw += 1
+        stats["win"].append(wins / 10)
+        stats["draw"].append(draw / 10)
+        stats["loss"].append(loss / 10)
 
 print()
-print("QLearn: ", stats[0])
-print("Rand: ", stats[1])
-print("Draws: ", stats[2])
+print("Saving graph.")
+fig = pyplot.figure()
+pyplot.plot(stats["win"], label="Win")
+pyplot.plot(stats["loss"], label="Loss")
+pyplot.plot(stats["draw"], label="Draw")
+pyplot.yticks([0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
+pyplot.xlabel("Epoch")
+pyplot.ylabel("Score")
+pyplot.grid()
+pyplot.tight_layout()
+pyplot.legend()
+pyplot.savefig("training-" + str(int(time())) + ".png")
