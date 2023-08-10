@@ -1,6 +1,7 @@
 from typing import Optional
 from matplotlib import pyplot
 from time import time
+from argparse import ArgumentParser
 import random
 
 EMPTY = 0
@@ -8,6 +9,8 @@ PLAYER1 = 1
 PLAYER2 = 2
 
 
+# Board state representation:
+#
 #   0 | 1 | 2
 #   --|---|--
 #   3 | 4 | 5
@@ -37,6 +40,24 @@ def winner(board: list[int]) -> Optional[int]:
     return None
 
 
+def piece(p: int, pos: int) -> str:
+    if p == PLAYER1:
+        return "X"
+    if p == PLAYER2:
+        return "O"
+    return str(pos)
+
+
+def print_board(board: list[int]) -> None:
+    print()
+    print(" ", piece(board[0], 0), " | ", piece(board[1], 1), " | ", piece(board[2], 2))
+    print("-----|-----|-----")
+    print(" ", piece(board[3], 3), " | ", piece(board[4], 4), " | ", piece(board[5], 5))
+    print("-----|-----|-----")
+    print(" ", piece(board[6], 6), " | ", piece(board[7], 7), " | ", piece(board[8], 8))
+    print()
+
+
 class Game:
     def __init__(self) -> None:
         self.board = [EMPTY] * 9
@@ -52,6 +73,18 @@ class Game:
     def update(self, move: int):
         self.board[move] = self.turn
         self.turn = PLAYER2 if self.turn == PLAYER1 else PLAYER1
+
+
+class HumanAgent:
+    def pick_move(self, board: list[int]) -> int:
+        available_actions = [i for i, m in enumerate(board) if m == EMPTY]
+        while True:
+            print("Your move:")
+            action = int(input())
+            if action in available_actions:
+                break
+            print("Invalid pick. Try again.")
+        return action
 
 
 class MissingLastStateActionError(BaseException):
@@ -73,7 +106,7 @@ class QLearningAgent:
         state = tuple(board)
         available_actions = [i for i, m in enumerate(state) if m == EMPTY]
         action = 0
-        # initialize qtable
+        # Initialize Q-Table
         if (state, action) not in self.qtable:
             for a in range(9):
                 if (state, a) not in self.qtable:
@@ -87,22 +120,22 @@ class QLearningAgent:
         state = tuple(board)
         available_actions = [i for i, m in enumerate(state) if m == EMPTY]
         action = 0
-        # initialize qtable
+        # Initialize Q-Table
         if (state, action) not in self.qtable:
             for a in range(9):
                 if (state, a) not in self.qtable:
                     self.qtable[(state, a)] = 0.05
-        # epsilon greedy
+        # Epsilon greedy
         if random.random() > self.epsilon:
             scores = [self.qtable[(state, a)] for a in available_actions]
             i = scores.index(max(scores))
             action = available_actions[i]
         else:
             action = random.choice(available_actions)
-        # update qtable based on last state/action pair
+        # Update Q-Table based on last state/action pair
         if self.last_state_action:
             lstate, laction = self.last_state_action
-            # the current state is the successor state we compute qval with
+            # The current state is the successor state we compute qval with
             maxaq = max(
                 [
                     self.qtable[(state, 0)],
@@ -117,15 +150,15 @@ class QLearningAgent:
                 ]
             )
             qval = self.qtable[(lstate, laction)]
-            # note: no reward is known so no reward is used
+            # Note: no reward is known so no reward is used
             new_qval = qval + self.learn_rate * ((self.discount * maxaq) - qval)
             self.qtable[(lstate, laction)] = new_qval
-        # save chosen state/action pair
+        # Save chosen state/action pair
         self.last_state_action = (state, action)
         return action
 
     def end_episode(self, winner: Optional[int]) -> None:
-        # calculate reward
+        # Calculate reward
         reward = 0.0
         if winner:
             if winner == self.player:
@@ -133,7 +166,7 @@ class QLearningAgent:
         else:
             reward = 0.5
 
-        # update final choice with reward
+        # Update final choice with reward
         if self.last_state_action:
             state, action = self.last_state_action
             qval = self.qtable[(state, action)]
@@ -142,17 +175,101 @@ class QLearningAgent:
         else:
             raise MissingLastStateActionError
 
-        # update epsilon
+        # Update epsilon
         self.epsilon -= self.epsilon_decay
         self.epsilon = max(self.epsilon_min, self.epsilon)
 
 
+# Player 1 = Q-Learning Agent
+# Player 2 = Random Agent
+def qlearn_vs_random(player1: QLearningAgent, games=10) -> tuple[int, int, int]:
+    win, loss, draw = 0, 0, 0
+    for _ in range(games):
+        game = Game()
+        while not game.is_over():
+            action = player1.policy_pick(game.board)
+            game.update(action)
+            if game.is_over():
+                break
+            action = random.choice([i for i, m in enumerate(game.board) if m == EMPTY])
+            game.update(action)
+        if game.winner:
+            if game.winner == PLAYER1:
+                win += 1
+            else:
+                loss += 1
+        else:
+            draw += 1
+    return (win / games, loss / games, draw / games)
+
+
+# Player 1 = Q-Learning Agent
+# Player 2 = Human
+def qlearn_vs_human(qplayer: QLearningAgent):
+    game = Game()
+    human_agent = HumanAgent()
+    while not game.is_over():
+        action = qplayer.policy_pick(game.board)
+        game.update(action)
+        if game.is_over():
+            break
+        print_board(game.board)
+        action = human_agent.pick_move(game.board)
+        game.update(action)
+    if game.winner:
+        print("Winner is Player ", game.winner)
+    else:
+        print("Draw!")
+
+
+# Player 1 = Human
+# Player 2 = Q-Learning Agent
+def human_vs_qlearn(qplayer: QLearningAgent):
+    game = Game()
+    human_agent = HumanAgent()
+    while not game.is_over():
+        print_board(game.board)
+        action = human_agent.pick_move(game.board)
+        game.update(action)
+        if game.is_over():
+            break
+        action = qplayer.policy_pick(game.board)
+        game.update(action)
+    if game.winner:
+        print("Winner is Player ", game.winner)
+    else:
+        print("Draw!")
+
+
+# Command line arguments
+parser = ArgumentParser(
+    prog="main.py",
+    description="Train a Q-Learning Agent to play Tic-Tac-Toe.",
+)
+parser.add_argument(
+    "-g",
+    "--graph",
+    help="generate Q-Learning Agent vs Random Agent graph",
+    action="store_true",
+)
+parser.add_argument(
+    "-p",
+    "--play",
+    help="play 10 rounds against the Q-Learning Agent",
+    action="store_true",
+)
+args = parser.parse_args()
+
+# Seed random library
+random.seed(time())
+
+# Training
 player1 = QLearningAgent(PLAYER1)
 player2 = QLearningAgent(PLAYER2)
 
-stats: dict = {"win": [], "draw": [], "loss": []}
+# Store stats for graph generation
+stats: dict = {"win": [], "loss": [], "draw": []}
 
-# Player1 v Player2
 for i in range(200_000):
     if i % 10_000 == 0:
         print(".", end="", flush=True)
@@ -167,43 +284,41 @@ for i in range(200_000):
     player1.end_episode(game.winner)
     player2.end_episode(game.winner)
 
+    # Stats against Random player
     if i % 2_000 == 0:
-        # Player1 v Random
-        wins = 0
-        draw = 0
-        loss = 0
-        for _ in range(10):
-            game = Game()
-            while not game.is_over():
-                action = player1.policy_pick(game.board)
-                game.update(action)
-                if game.is_over():
-                    break
-                action = random.choice(
-                    [i for i, m in enumerate(game.board) if m == EMPTY]
-                )
-                game.update(action)
-            if game.winner:
-                if game.winner == PLAYER1:
-                    wins += 1
-                else:
-                    loss += 1
-            else:
-                draw += 1
-        stats["win"].append(wins / 10)
-        stats["draw"].append(draw / 10)
-        stats["loss"].append(loss / 10)
+        w, l, d = qlearn_vs_random(player1)
+        stats["win"].append(w)
+        stats["loss"].append(l)
+        stats["draw"].append(d)
 
-print()
-print("Saving graph.")
-fig = pyplot.figure()
-pyplot.plot(stats["win"], label="Win")
-pyplot.plot(stats["loss"], label="Loss")
-pyplot.plot(stats["draw"], label="Draw")
-pyplot.yticks([0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
-pyplot.xlabel("Epoch")
-pyplot.ylabel("Score")
-pyplot.grid()
-pyplot.tight_layout()
-pyplot.legend()
-pyplot.savefig("training-" + str(int(time())) + ".png")
+# Make stats graph for Q-Learning Agent vs Random Agent
+if args.graph:
+    fig = pyplot.figure()
+    pyplot.plot(stats["win"], label="Win")
+    pyplot.plot(stats["loss"], label="Loss")
+    pyplot.plot(stats["draw"], label="Draw")
+    pyplot.yticks([0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
+    pyplot.xlabel("Epoch")
+    pyplot.ylabel("Score")
+    pyplot.grid()
+    pyplot.tight_layout()
+    pyplot.legend()
+    pyplot.savefig("training-" + str(int(time())) + ".png")
+
+# Trained Q-Learning Agent vs Human
+if args.play:
+    print()
+    print("Player 1: Human")
+    print("Player 2: Q-Learning Agent")
+    for i in range(5):
+        print()
+        print("Round", i + 1)
+        human_vs_qlearn(player2)
+        print()
+    print("Player 1: Q-Learning Agent")
+    print("Player 2: Human")
+    for i in range(5):
+        print()
+        print("Round", i + 1)
+        qlearn_vs_human(player1)
+        print()
