@@ -1,6 +1,7 @@
 from constants import PLAYER1, WIN, LOSS, DRAW
 from game import Game
 
+# Run a game loop and return the result of the game.
 def faceoff(player1, player2) -> int:
     game = Game()
     while not game.is_over():

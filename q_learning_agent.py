@@ -33,6 +33,7 @@ class QLearningAgent:
         action = available_actions[i]
         return action
 
+    # Train the Q-Table and pick a move.
     def pick_and_train_action(self, board: list[int]) -> int:
         state = tuple(board)
         available_actions = [i for i, m in enumerate(state) if m == EMPTY]
@@ -74,6 +75,7 @@ class QLearningAgent:
         self.last_state_action = (state, action)
         return action
 
+    # The end of a game when a reward is known.
     def end_episode(self, winner: Optional[int]) -> None:
         # Calculate reward
         reward = 0.0

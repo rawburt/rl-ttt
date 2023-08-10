@@ -10,6 +10,7 @@ from constants import EMPTY, PLAYER1, PLAYER2
 #   6 | 7 | 8
 
 
+# Check verticals, horizontals, and diagonals for a winner.
 def winner(board: list[int]) -> Optional[int]:
     if board[0] != EMPTY:
         if (board[0] == board[1] and board[1] == board[2]) or (
@@ -32,6 +33,7 @@ def winner(board: list[int]) -> Optional[int]:
     return None
 
 
+# Format board piece for displaying the board state.
 def piece(p: int, pos: int) -> str:
     if p == PLAYER1:
         return "X"
@@ -40,6 +42,7 @@ def piece(p: int, pos: int) -> str:
     return str(pos)
 
 
+# Display the board state.
 def print_board(board: list[int]) -> None:
     print()
     print(" ", piece(board[0], 0), " | ", piece(board[1], 1), " | ", piece(board[2], 2))
@@ -50,6 +53,7 @@ def print_board(board: list[int]) -> None:
     print()
 
 
+# A common utility for finding the indexes of open places on the board.
 def available_actions(board: list[int]) -> list[int]:
     return [i for i, m in enumerate(board) if m == EMPTY]
 
@@ -60,12 +64,14 @@ class Game:
         self.turn = PLAYER1
         self.winner: Optional[int] = None
 
+    # Check if the game has a winner or a draw.
     def is_over(self) -> bool:
         self.winner = winner(self.board)
         if self.winner:
             return True
         return self.board.count(0) == 0
 
+    # Update the board state and toggle player turns.
     def update(self, move: int):
         self.board[move] = self.turn
         self.turn = PLAYER2 if self.turn == PLAYER1 else PLAYER1

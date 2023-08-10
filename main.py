@@ -44,6 +44,11 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
+# Setup episode numbers
+EPISODES = 200_000
+OUTPUT_MARKER = EPISODES / 20
+METRIC_GATHER = EPISODES / 100
+
 # Seed the randomness
 random.seed(time())
 
@@ -54,8 +59,8 @@ stats: dict = {"win": [], "loss": [], "draw": []}
 player1 = QLearningAgent(PLAYER1)
 player2 = QLearningAgent(PLAYER2)
 
-for i in range(200_000):
-    if i % 10_000 == 0:
+for i in range(EPISODES):
+    if i % OUTPUT_MARKER == 0:
         print(".", end="", flush=True)
     game = Game()
     while not game.is_over():
@@ -69,7 +74,7 @@ for i in range(200_000):
     player2.end_episode(game.winner)
 
     # Save stats against Random player
-    if i % 2_000 == 0:
+    if i % METRIC_GATHER == 0:
         w, l, d = qlearn_vs_random(player1)
         stats["win"].append(w)
         stats["loss"].append(l)
